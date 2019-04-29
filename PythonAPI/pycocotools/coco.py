@@ -61,20 +61,21 @@ if PYTHON_VERSION == 2:
     from urllib import urlretrieve
 elif PYTHON_VERSION == 3:
     from urllib.request import urlretrieve
-
+import ext
 
 def _isArrayLike(obj):
     return hasattr(obj, '__iter__') and hasattr(obj, '__len__')
 
 
 class COCO:
-    def __init__(self, annotation_file=None):
+    def __init__(self, annotation_file=None, use_ext=False):
         """
         Constructor of Microsoft COCO helper class for reading and visualizing annotations.
         :param annotation_file (str): location of annotation file
         :param image_folder (str): location to the folder that hosts images.
         :return:
         """
+        self.use_ext = use_ext
         # load dataset
         self.dataset,self.anns,self.cats,self.imgs = dict(),dict(),dict(),dict()
         self.imgToAnns, self.catToImgs = defaultdict(list), defaultdict(list)
@@ -85,11 +86,14 @@ class COCO:
             assert type(dataset)==dict, 'annotation file format {} not supported'.format(type(dataset))
             print('Done (t={:0.2f}s)'.format(time.time()- tic))
             self.dataset = dataset
-            self.createIndex()
+            self.createIndex(use_ext)
 
-    def createIndex(self):
+    def createIndex(self, use_ext=False):
         # create index
         print('creating index...')
+        if use_ext:
+            ext.cpp_create_index(self.dataset)
+            return
         anns, cats, imgs = {}, {}, {}
         imgToAnns,catToImgs = defaultdict(list),defaultdict(list)
         if 'annotations' in self.dataset:
@@ -125,6 +129,9 @@ class COCO:
         """
         for key, value in self.dataset['info'].items():
             print('{}: {}'.format(key, value))
+
+    def getimgToAnns(self):
+        return self.imgToAnns;
 
     def getAnnIds(self, imgIds=[], catIds=[], areaRng=[], iscrowd=None):
         """
@@ -196,6 +203,9 @@ class COCO:
                 else:
                     ids &= set(self.catToImgs[catId])
         return list(ids)
+
+    def getAnns(self):
+        return self.anns;
 
     def loadAnns(self, ids=[]):
         """
@@ -294,23 +304,29 @@ class COCO:
             for ann in anns:
                 print(ann['caption'])
 
-    def loadRes(self, resFile):
+    def loadRes(self, resFile, use_ext=False):
         """
         Load result file and return a result api object.
         :param   resFile (str)     : file name of result file
         :return: res (obj)         : result api object
         """
-        res = COCO()
+        res = COCO(use_ext=use_ext)
         res.dataset['images'] = [img for img in self.dataset['images']]
-
         print('Loading and preparing results...')
         tic = time.time()
-        # Check result type in a way compatible with Python 2 and 3.
-        try:
-            is_string =  isinstance(resFile, basestring)  # Python 2
-        except NameError:
-            is_string = isinstance(resFile, str)  # Python 3
-        if is_string:
+        if use_ext:
+            if type(resFile) == np.ndarray:
+                ext.cpp_load_res_numpy(res.dataset,resFile)
+            else:
+                print('resFile is',resFile)
+                if type(resFile) == str:
+                    anns = json.load(open(resFile))
+                else:
+                    anns = resFile
+                ext.cpp_load_res(res.dataset,anns)
+            print('DONE (t={:0.2f}s)'.format(time.time()- tic))
+            return res
+        if type(resFile) == str: #or type(resFile) == unicode:
             anns = json.load(open(resFile))
         elif type(resFile) == np.ndarray:
             anns = self.loadNumpyAnnotations(resFile)
@@ -357,7 +373,7 @@ class COCO:
         print('DONE (t={:0.2f}s)'.format(time.time()- tic))
 
         res.dataset['annotations'] = anns
-        res.createIndex()
+        res.createIndex(use_ext)
         return res
 
     def download(self, tarDir = None, imgIds = [] ):
@@ -406,6 +422,9 @@ class COCO:
                 'category_id': int(data[i, 6]),
                 }]
         return ann
+
+    def getImgs(self):
+        return self.imgs
 
     def annToRLE(self, ann):
         """

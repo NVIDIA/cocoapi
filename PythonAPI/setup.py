@@ -14,7 +14,8 @@ ext_modules = [
     Extension(
         'ext',
         sources=['pycocotools/ext.cpp'],
-        extra_compile_args=['-O3', '-Wall', '-shared', '-std=c++11', '-fPIC'],
+        extra_compile_args=['-O3', '-Wall', '-shared', '-fopenmp', '-std=c++11', '-fPIC'],
+        extra_link_args=['-lgomp'],
     )
 ]
 

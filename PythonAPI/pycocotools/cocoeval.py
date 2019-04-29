@@ -58,7 +58,7 @@ class COCOeval:
     # Data, paper, and tutorials available at:  http://mscoco.org/
     # Code written by Piotr Dollar and Tsung-Yi Lin, 2015.
     # Licensed under the Simplified BSD License [see coco/license.txt]
-    def __init__(self, cocoGt=None, cocoDt=None, iouType='segm', use_ext=True):
+    def __init__(self, cocoGt=None, cocoDt=None, iouType='segm', use_ext=False, num_threads=1):
         '''
         Initialize CocoEval using coco APIs for gt and dt
         :param cocoGt: coco object with ground truth annotations
@@ -79,6 +79,7 @@ class COCOeval:
         self.stats = []                     # result summarization
         self.ious = {}                      # ious between all gts and dts
         self.use_ext = use_ext              # use c++ extension
+        self.num_threads = num_threads      # number of OpenMP threads
         if not cocoGt is None:
             self.params.imgIds = sorted(cocoGt.getImgIds())
             self.params.catIds = sorted(cocoGt.getCatIds())
@@ -114,14 +115,10 @@ class COCOeval:
                 gt['ignore'] = (gt['num_keypoints'] == 0) or gt['ignore']
         self._gts = defaultdict(list)       # gt for evaluation
         self._dts = defaultdict(list)       # dt for evaluation
-        if not self.use_ext:
-            for gt in gts:
-                self._gts[gt['image_id'], gt['category_id']].append(gt)
-            for dt in dts:
-                self._dts[dt['image_id'], dt['category_id']].append(dt)
-        else:
-            ext.cpp_prepare(gts,dts,p.iouType)
-
+        for gt in gts:
+            self._gts[gt['image_id'], gt['category_id']].append(gt)
+        for dt in dts:
+            self._dts[dt['image_id'], dt['category_id']].append(dt)
         self.evalImgs = defaultdict(list)   # per-image per-category evaluation results
         self.eval     = {}                  # accumulated evaluation results
 
@@ -138,12 +135,18 @@ class COCOeval:
             p.iouType = 'segm' if p.useSegm == 1 else 'bbox'
             print('useSegm (deprecated) is not None. Running {} evaluation'.format(p.iouType))
         print('Evaluate annotation type *{}*'.format(p.iouType))
+
         p.imgIds = list(np.unique(p.imgIds))
         if p.useCats:
             p.catIds = list(np.unique(p.catIds))
         p.maxDets = sorted(p.maxDets)
         self.params=p
 
+        if self.use_ext:
+            p.imgIds,p.catIds,self.eval = ext.cpp_evaluate(p.useCats,p.areaRng,p.iouThrs,p.maxDets,p.recThrs,p.iouType,self.num_threads)
+            toc = time.time()
+            print('DONE (t={:0.2f}s).'.format(toc-tic))
+            return
         self._prepare()
         # loop through images, area range, max detection number
         catIds = p.catIds if p.useCats else [-1]
@@ -152,23 +155,17 @@ class COCOeval:
             computeIoU = self.computeIoU
         elif p.iouType == 'keypoints':
             computeIoU = self.computeOks
-        if not self.use_ext:# or p.iouType == 'segm':
-            self.ious = {(imgId, catId): computeIoU(imgId, catId) \
-                            for imgId in p.imgIds
-                            for catId in catIds}
-        else:
-            self.ious = ext.cpp_compute_iou(p.imgIds,catIds,self._gts,self._dts,p.iouType,p.maxDets[-1],p.useCats)
+        self.ious = {(imgId, catId): computeIoU(imgId, catId) \
+                        for imgId in p.imgIds
+                        for catId in catIds}
 
         evaluateImg = self.evaluateImg
         maxDet = p.maxDets[-1]
-        if not self.use_ext:
-            self.evalImgs = [evaluateImg(imgId, catId, areaRng, maxDet)
-                     for catId in catIds
-                     for areaRng in p.areaRng
-                     for imgId in p.imgIds
-                 ]
-        else:
-            ext.cpp_evaluate_img(p.useCats,maxDet,catIds,p.areaRng,p.imgIds,self._gts,self._dts,self.ious,p.iouThrs)
+        self.evalImgs = [evaluateImg(imgId, catId, areaRng, maxDet)
+                 for catId in catIds
+                 for areaRng in p.areaRng
+                 for imgId in p.imgIds
+             ]
         self._paramsEval = copy.deepcopy(self.params)
         toc = time.time()
         print('DONE (t={:0.2f}s).'.format(toc-tic))
@@ -336,6 +333,10 @@ class COCOeval:
         #if not self.evalImgs:
         #    print('Please run evaluate() first')
         # allows input customized parameters
+        if self.use_ext:
+            toc = time.time()
+            print('DONE (t={:0.2f}s).'.format( toc-tic))
+            return
         if p is None:
             p = self.params
         p.catIds = p.catIds if p.useCats == 1 else [-1]
@@ -347,7 +348,6 @@ class COCOeval:
         precision   = -np.ones((T,R,K,A,M)) # -1 for the precision of absent categories
         recall      = -np.ones((T,K,A,M))
         scores      = -np.ones((T,R,K,A,M))
-
         # create dictionary for future indexing
         _pe = self._paramsEval
         catIds = _pe.catIds if _pe.useCats else [-1]
@@ -362,19 +362,6 @@ class COCOeval:
         i_list = [n for n, i in enumerate(p.imgIds)  if i in setI]
         I0 = len(_pe.imgIds)
         A0 = len(_pe.areaRng)
-        if self.use_ext:
-            precision,recall,scores=ext.cpp_accumulate(T,R,K,A,M,I0,A0,k_list,a_list,m_list,i_list,p.recThrs)
-            self.eval = {
-                'params': p,
-                'counts': [T, R, K, A, M],
-                'date': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'precision': precision,
-                'recall':   recall,
-                'scores': scores,
-            }
-            toc = time.time()
-            print('DONE (t={:0.2f}s).'.format( toc-tic))
-            return
         # retrieve E at each category, area range, and max number of detections
         for k, k0 in enumerate(k_list):
             Nk = k0*A0*I0
@@ -452,7 +439,7 @@ class COCOeval:
         '''
         def _summarize( ap=1, iouThr=None, areaRng='all', maxDets=100 ):
             p = self.params
-            iStr = ' {:<18} {} @[ IoU={:<9} | area={:>6s} | maxDets={:>3d} ] = {:0.3f}'
+            iStr = ' {:<18} {} @[ IoU={:<9} | area={:>6s} | maxDets={:>3d} ] = {:0.5f}'
             titleStr = 'Average Precision' if ap == 1 else 'Average Recall'
             typeStr = '(AP)' if ap==1 else '(AR)'
             iouStr = '{:0.2f}:{:0.2f}'.format(p.iouThrs[0], p.iouThrs[-1]) \
