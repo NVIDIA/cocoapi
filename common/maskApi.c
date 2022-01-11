@@ -42,7 +42,7 @@ void rleEncode( RLE *R, const byte *M, siz h, siz w, siz n ) {
 
 void rleEncodePaste( RLE *R, const byte *M, siz h, siz w, siz n, siz oy, siz ox, siz oh, siz ow ) {
   siz i, j, k, a=w*h, lp=ox, rp=ow-(ox+w), tp=oy, bp=oh-(oy+h); uint c, *cnts; byte p;
-  cnts = malloc(sizeof(uint)*(a+1));
+  cnts = malloc(sizeof(uint)*(ow*oh+1));
   for(i=0; i<n; i++) {
     const byte *T=M+a*i; siz jj=0; k=0; p=0; c=lp*oh+tp;
     for(j=0; j<a; j++) { 
