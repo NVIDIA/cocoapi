@@ -984,6 +984,7 @@ void cpp_create_index(py::dict dataset) {
     catids.push_back(catid);
   }
 
+  auto issegm = dataset.contains("segmentation");
   auto anns = py::cast<std::vector<py::dict>>(dataset["annotations"]);
   for (size_t i = 0; i < anns.size(); i++) {
     anns_struct ann;
@@ -998,17 +999,19 @@ void cpp_create_index(py::dict dataset) {
     }*/
     ann.bbox = py::cast<std::vector<float>>(anns[i]["bbox"]);
 
-    auto is_segm_list = py::isinstance<py::list>(anns[i]["segmentation"]);
-    auto is_cnts_list = is_segm_list ? 0 : py::isinstance<py::list>(anns[i]["segmentation"]["counts"]);
+    if (issegm) {
+        auto is_segm_list = py::isinstance<py::list>(anns[i]["segmentation"]);
+        auto is_cnts_list = is_segm_list ? 0 : py::isinstance<py::list>(anns[i]["segmentation"]["counts"]);
 
-    if (is_segm_list) {
-      ann.segm_list = py::cast<std::vector<std::vector<double>>>(anns[i]["segmentation"]);
-    } else if (is_cnts_list) {
-      ann.segm_size = py::cast<std::vector<int>>(anns[i]["segmentation"]["size"]);
-      ann.segm_counts_list = py::cast<std::vector<int>>(anns[i]["segmentation"]["counts"]);
-    } else {
-      ann.segm_size = py::cast<std::vector<int>>(anns[i]["segmentation"]["size"]);
-      ann.segm_counts_str = py::cast<std::string>(anns[i]["segmentation"]["counts"]);
+        if (is_segm_list) {
+            ann.segm_list = py::cast<std::vector<std::vector<double>>>(anns[i]["segmentation"]);
+        } else if (is_cnts_list) {
+            ann.segm_size = py::cast<std::vector<int>>(anns[i]["segmentation"]["size"]);
+            ann.segm_counts_list = py::cast<std::vector<int>>(anns[i]["segmentation"]["counts"]);
+        } else {
+            ann.segm_size = py::cast<std::vector<int>>(anns[i]["segmentation"]["size"]);
+            ann.segm_counts_str = py::cast<std::string>(anns[i]["segmentation"]["counts"]);
+        }
     }
 
     auto k = key(ann.image_id, ann.category_id);
