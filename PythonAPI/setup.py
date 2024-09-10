@@ -1,9 +1,13 @@
-from os.path import abspath, join
+from os.path import abspath, join, exists
 from setuptools import setup, Extension
+from sys import version_info
 import numpy as np
 
 # To compile and install locally run "python setup.py build_ext --inplace"
 # To install library to Python site-packages run "python setup.py build_ext install"
+
+if (version_info.major, version_info.minor) >= (3, 12) and not exists("pycocotools/_mask.c"):
+    open("pycocotools/_mask.c", "w").close()
 
 ext_modules = [
     Extension(
