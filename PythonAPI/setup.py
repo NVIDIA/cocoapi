@@ -1,7 +1,6 @@
-from os.path import abspath, join, exists
+from os.path import join, exists
 from setuptools import setup, Extension
 from sys import version_info
-import os
 
 # Provide cythonize fallback: if Cython is available build from .pyx,
 # otherwise use the checked-in .c/.cpp files.
@@ -20,21 +19,21 @@ if (version_info.major, version_info.minor) >= (3, 12) and not exists("pycocotoo
     open("pycocotools/_mask.c", "w").close()
 
 mask_source = 'pycocotools/_mask.pyx' if USE_CYTHON else 'pycocotools/_mask.c'
-ext_source_maskapi = abspath(join('..', 'common', 'maskApi.c'))
+ext_source_maskapi = join('..', 'common', 'maskApi.c')
 
 ext_modules = [
     Extension(
         name='pycocotools._mask',
         sources=[ext_source_maskapi, mask_source],
         extra_compile_args=['-Wno-cpp', '-Wno-unused-function', '-std=c99'],
-        include_dirs=[np.get_include(), abspath(join('..', 'common'))],
+        include_dirs=[np.get_include(), join('..', 'common')],
     ),
     Extension(
         name='ext',
         sources=['pycocotools/ext.cpp', 'pycocotools/simdjson.cpp'],
         extra_compile_args=['-O3', '-Wall', '-shared', '-fopenmp', '-std=c++17', '-fPIC'],
         include_dirs=[np.get_include(), 'pycocotools'],
-        library_dirs=[abspath(join(np.get_include(), '..', 'lib'))],
+        library_dirs=[join(np.get_include(), '..', 'lib')],
         libraries=['npymath', 'gomp'],
         language='c++',
     )
