@@ -1,0 +1,34 @@
+[build-system]
+# Required at build time so wheels can be built in an isolated environment.
+# numpy and cython are needed at build-time because the project builds C/Cython extensions.
+requires = [
+  "setuptools>=61.0",
+  "wheel",
+  "cython>=0.27.3",
+  "numpy>=1.16"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pycocotools"
+version = "2.0+nv0.8.1"
+description = "Python API for the Microsoft COCO dataset (NVIDIA fork)."
+readme = "README.md"
+requires-python = ">=3.7"
+authors = [
+  { name = "NVIDIA" }
+]
+keywords = ["coco", "computer-vision", "annotation", "dataset"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent"
+]
+
+dependencies = [
+  "matplotlib>=2.1.0"
+]
+
+[tool.setuptools]
+packages = ["pycocotools"]
+package-dir = { "pycocotools" = "pycocotools" }
